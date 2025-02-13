@@ -7,25 +7,25 @@ interface ITachyonAccount {
     /// @notice Emitted when a deposit is made to the account.
     /// @param sender The address initiating the deposit.
     /// @param amount The amount of tokens deposited.
-    event Deposit(address indexed sender, uint256 amount);
+    event RathAccountDeposit(address indexed sender, uint256 amount);
 
     /// @notice Emitted when an account closing request is initiated.
     /// @param sender The address of the account owner initiating the request.
     /// @param token The address of the associated ERC20 token.
     /// @param timeStamp The timestamp when the request was initiated.
-    event AccountClosingRequest(address indexed sender, address token, uint256 timeStamp);
+    event RathAccountClosingRequest(address indexed sender, address token, uint256 timeStamp);
 
     /// @notice Emitted when the account is successfully closed.
     /// @param sender The address of the account owner.
     /// @param amount The amount of tokens transferred to the owner upon closure.
-    event AccountClosed(address indexed sender, uint256 amount);
+    event RathAccountClosed(address indexed sender, uint256 amount);
 
     /// @notice Emitted when a bundle root hash is submitted.
     /// @param sender The address submitting the bundle root hash.
     /// @param token The address of the associated ERC20 token.
     /// @param amount The amount of tokens associated with the bundle.
     /// @param batchRootHash The root hash of the submitted bundle.
-    event BundleRootSubmitted(address indexed sender, address token, uint256 amount, bytes32 batchRootHash);
+    event RathBundleRootSubmitted(address indexed sender, address token, uint256 amount, bytes32 batchRootHash);
 
     /// @notice Error thrown when the cooling period has not yet elapsed.
     /// @param currentTime The current block timestamp.

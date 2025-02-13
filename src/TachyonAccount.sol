@@ -3,17 +3,19 @@ pragma solidity ^0.8.13;
 
 import "./interfaces/ITachyonAccount.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
+import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
 /// @title TachyonAccount
 /// @author Aniket965, RathFoundation
 /// @notice Manages Tachyon accounts.
 contract TachyonAccount is ITachyonAccount, Ownable {
+
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
     address public immutable RathFoundation;
 
     /// @notice Duration of the cooling period required before an account can be closed.
-    uint256 public constant COOLING_PERIOD = 1 days;
+    uint256 public constant COOLING_PERIOD = 7 days;
 
     /// @notice Current balance of the account in tokens.
     uint256 public balance;
@@ -45,7 +47,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     function openAccountClosingRequest() external override onlyOwner {
         isAccountClosingRequestOpen = true;
         accountClosingRequestTime = block.timestamp;
-        emit AccountClosingRequest(owner(), address(token), accountClosingRequestTime);
+        emit RathAccountClosingRequest(owner(), address(token), accountClosingRequestTime);
     }
 
     /// @inheritdoc ITachyonAccount
@@ -61,8 +63,8 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         balance = 0;
         isAccountClosed = true;
         
-        token.transfer(owner(), amount);
-        emit AccountClosed(owner(), amount);
+        SafeTransferLib.safeTransfer(address(token),owner(), amount);
+        emit RathAccountClosed(owner(), amount);
     }
 
     /// @inheritdoc ITachyonAccount
@@ -70,11 +72,9 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         if (amount == 0) {
             revert DepositAmountZero();
         }
-        if (!token.transferFrom(msg.sender, address(this), amount)) {
-            revert TokenTransferFailed();
-        }
+        SafeTransferLib.safeTransferFrom(address(token), msg.sender, address(this), amount);
         balance += amount;
-        emit Deposit(msg.sender, amount);
+        emit RathAccountDeposit(msg.sender, amount);
     }
 
     /// @inheritdoc ITachyonAccount
@@ -91,7 +91,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
             revert AmountExceedsBalance(amount, balance);
         }
         balance -= amount;
-        ERC20(token).transfer(RathFoundation, amount);
-        emit BundleRootSubmitted(owner(), address(token), amount, bundleRootHash);
+        SafeTransferLib.safeTransfer(address(token),RathFoundation, amount);
+        emit RathBundleRootSubmitted(owner(), address(token), amount, bundleRootHash);
     }
 }
