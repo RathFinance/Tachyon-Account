@@ -10,7 +10,6 @@ import {Ownable} from "solady/auth/Ownable.sol";
 /// @author Aniket965, RathFoundation
 /// @notice Manages Tachyon accounts.
 contract TachyonAccount is ITachyonAccount, Ownable {
-
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
     address public immutable RathFoundation;
 
@@ -32,7 +31,6 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     /// @notice Indicates if the account has been closed.
     bool public isAccountClosed;
 
-
     /// @notice Initializes the contract with the Rath Foundation address, owner, and associated token.
     /// @param _rathFoundation Address of the Rath Foundation.
     /// @param _owner Address of the contract owner.
@@ -44,37 +42,48 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function openAccountClosingRequest() external override onlyOwner {
+    function submitAccountClosureRequest() external override onlyOwner {
+        if (isAccountClosed) {
+            revert AccountClosed();
+        }
         isAccountClosingRequestOpen = true;
         accountClosingRequestTime = block.timestamp;
-        emit RathAccountClosingRequest(owner(), address(token), accountClosingRequestTime);
+        emit RathAccountClosureRequested(owner(), address(token), accountClosingRequestTime);
     }
 
     /// @inheritdoc ITachyonAccount
     function closeAccount() external override onlyOwner {
+        if (isAccountClosed) {
+            revert AccountClosed();
+        }
+
         if (!isAccountClosingRequestOpen) {
-            revert Unauthorized();
+            revert ClosureRequestRequired();
         }
         if (block.timestamp < accountClosingRequestTime + COOLING_PERIOD) {
             revert CoolingPeriodNotOver(block.timestamp, accountClosingRequestTime + COOLING_PERIOD);
         }
         uint256 amount = balance;
-        
+
         balance = 0;
         isAccountClosed = true;
-        
-        SafeTransferLib.safeTransfer(address(token),owner(), amount);
+
+        SafeTransferLib.safeTransfer(address(token), owner(), amount);
         emit RathAccountClosed(owner(), amount);
     }
 
     /// @inheritdoc ITachyonAccount
     function deposit(uint256 amount) external payable override {
+        if (isAccountClosed) {
+            revert AccountClosed();
+        }
+
         if (amount == 0) {
             revert DepositAmountZero();
         }
         SafeTransferLib.safeTransferFrom(address(token), msg.sender, address(this), amount);
         balance += amount;
-        emit RathAccountDeposit(msg.sender, amount);
+        emit RathAccountDeposited(msg.sender, address(token), amount);
     }
 
     /// @inheritdoc ITachyonAccount
@@ -83,15 +92,15 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function submitBundleRootHash(uint256 amount, bytes32 bundleRootHash) external override {
+    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external override {
         if (msg.sender != RathFoundation) {
-            revert Unauthorized();
+            revert OnlyRathFoundationCanCharge();
         }
         if (amount > balance) {
             revert AmountExceedsBalance(amount, balance);
         }
         balance -= amount;
-        SafeTransferLib.safeTransfer(address(token),RathFoundation, amount);
-        emit RathBundleRootSubmitted(owner(), address(token), amount, bundleRootHash);
+        SafeTransferLib.safeTransfer(address(token), RathFoundation, amount);
+        emit RathAccountCharged(owner(), address(token), amount, bundleRootHash);
     }
 }
