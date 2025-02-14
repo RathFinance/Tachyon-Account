@@ -22,9 +22,6 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     /// @notice Duration of the cooling period required before an account can be closed.
     uint256 public constant COOLING_PERIOD = 7 days;
 
-    /// @notice Current balance of the account in tokens.
-    uint256 public balance;
-
     /// @notice The ERC20 token associated with this account.
     ERC20 public token;
 
@@ -78,9 +75,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         if (block.timestamp < accountClosingRequestTime + COOLING_PERIOD) {
             revert CoolingPeriodNotOver(block.timestamp, accountClosingRequestTime + COOLING_PERIOD);
         }
-        uint256 amount = balance;
-
-        balance = 0;
+        uint256 amount = ERC20(address(token)).balanceOf(address(this));
         isAccountClosed = true;
 
         SafeTransferLib.safeTransfer(address(token), owner(), amount);
@@ -93,7 +88,6 @@ contract TachyonAccount is ITachyonAccount, Ownable {
             revert DepositAmountZero();
         }
         SafeTransferLib.safeTransferFrom(address(token), msg.sender, address(this), amount);
-        balance += amount;
         emit RathAccountDeposit(msg.sender, address(token), amount);
     }
 
@@ -107,10 +101,6 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         if (msg.sender != RathFoundation) {
             revert OnlyRathFoundationCanCharge();
         }
-        if (amount > balance) {
-            revert AmountExceedsBalance(amount, balance);
-        }
-        balance -= amount;
         SafeTransferLib.safeTransfer(address(token), RathFoundation, amount);
         emit RathAccountCharged(owner(), address(token), amount, bundleRootHash);
     }

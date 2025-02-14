@@ -36,11 +36,6 @@ interface ITachyonAccount {
     /// @notice Error thrown when a deposit amount is zero.
     error DepositAmountZero();
 
-    /// @notice Error thrown when the amount exceeds the account balance.
-    /// @param amount The requested amount.
-    /// @param balance The current account balance.
-    error AmountExceedsBalance(uint256 amount, uint256 balance);
-
     /// @notice Error thrown when the account is not authorized to charge the account.
     error OnlyRathFoundationCanCharge();
 
