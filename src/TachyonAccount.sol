@@ -58,7 +58,6 @@ contract TachyonAccount is ITachyonAccount, Ownable {
 
     /// @inheritdoc ITachyonAccount
     function closeAccount() external override onlyOwner onlyOpenAccount {
-
         if (!isAccountClosingRequestOpen) {
             revert ClosureRequestRequired();
         }
@@ -76,7 +75,6 @@ contract TachyonAccount is ITachyonAccount, Ownable {
 
     /// @inheritdoc ITachyonAccount
     function deposit(uint256 amount) external payable override onlyOpenAccount {
-
         if (amount == 0) {
             revert DepositAmountZero();
         }
