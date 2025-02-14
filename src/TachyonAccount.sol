@@ -1,3 +1,9 @@
+/*
+ ░█▀▄░█▀█░▀█▀░█░█░░░█▀▀░▀█▀░█▀█░█▀█░█▀█░█▀▀░█▀▀
+ ░█▀▄░█▀█░░█░░█▀█░░░█▀▀░░█░░█░█░█▀█░█░█░█░░░█▀▀
+ ░▀░▀░▀░▀░░▀░░▀░▀░░░▀░░░▀▀▀░▀░▀░▀░▀░▀░▀░▀▀▀░▀▀▀
+*/ 
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
@@ -7,7 +13,7 @@ import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
 /// @title TachyonAccount
-/// @author Aniket965, RathFoundation
+/// @author Aniket965, Rath.fi
 /// @notice Manages Tachyon accounts.
 contract TachyonAccount is ITachyonAccount, Ownable {
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
