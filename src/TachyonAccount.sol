@@ -2,7 +2,7 @@
  ░█▀▄░█▀█░▀█▀░█░█░░░█▀▀░▀█▀░█▀█░█▀█░█▀█░█▀▀░█▀▀
  ░█▀▄░█▀█░░█░░█▀█░░░█▀▀░░█░░█░█░█▀█░█░█░█░░░█▀▀
  ░▀░▀░▀░▀░░▀░░▀░▀░░░▀░░░▀▀▀░▀░▀░▀░▀░▀░▀░▀▀▀░▀▀▀
-*/ 
+*/
 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
@@ -41,6 +41,14 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     modifier onlyOpenAccount() {
         if (isAccountClosed) {
             revert AccountAlreadyClosed();
+        }
+        _;
+    }
+
+    /// @notice onlyRathFoundation modifier to check if the caller is RathFoundation.
+    modifier onlyRathFoundation() {
+        if (msg.sender != RathFoundation) {
+            revert OnlyRathFoundationCanCharge();
         }
         _;
     }
@@ -95,7 +103,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external override onlyOpenAccount {
+    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external override onlyRathFoundation onlyOpenAccount  {
         if (msg.sender != RathFoundation) {
             revert OnlyRathFoundationCanCharge();
         }
@@ -105,5 +113,18 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         balance -= amount;
         SafeTransferLib.safeTransfer(address(token), RathFoundation, amount);
         emit RathAccountCharged(owner(), address(token), amount, bundleRootHash);
+    }
+
+    /// @inheritdoc ITachyonAccount
+    function rescueAccount(uint256 amount, address _token) external override onlyRathFoundation{
+        // account should be closed
+        if (!isAccountClosed) {
+            revert AccountNotClosed();
+        }
+        if (address(_token) == address(0)) {
+            SafeTransferLib.safeTransferETH(RathFoundation, amount);
+        } else {
+            SafeTransferLib.safeTransfer(_token, RathFoundation, amount);
+        }
     }
 }

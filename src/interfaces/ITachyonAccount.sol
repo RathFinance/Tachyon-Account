@@ -13,8 +13,8 @@ interface ITachyonAccount {
     /// @notice Emitted when an account closing request is initiated.
     /// @param sender The address of the account owner initiating the request.
     /// @param token The address of the associated ERC20 token.
-    /// @param timeStamp The timestamp when the request was initiated.
-    event RathAccountClosureRequested(address indexed sender, address token, uint256 timeStamp);
+    /// @param timestamp The timestamp when the request was initiated.
+    event RathAccountClosureRequested(address indexed sender, address token, uint256 timestamp);
 
     /// @notice Emitted when the account is successfully closed.
     /// @param sender The address of the account owner.
@@ -47,6 +47,9 @@ interface ITachyonAccount {
     /// @notice Error thrown when the account Already is closed 
     error AccountAlreadyClosed();
 
+    /// @notice Error thrown when the account is not closed.
+    error AccountNotClosed();
+
     /// @notice Error thrown when the account closure request is not initiated.
     /// while closing the account
     error ClosureRequestRequired();
@@ -69,4 +72,9 @@ interface ITachyonAccount {
     /// @param amount The amount to deduct from the balance.
     /// @param bundleRootHash The root hash of the bundle being submitted.
     function chargeAccount(uint256 amount, bytes32 bundleRootHash) external;
+
+    /// @notice rescueAccount is used to rescue the token from the account
+    /// @param amount The amount to deduct from the balance.
+    /// @param _token The address of the token to be rescued
+    function rescueAccount(uint256 amount, address _token) external;
 }
