@@ -31,6 +31,14 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     /// @notice Indicates if the account has been closed.
     bool public isAccountClosed;
 
+    /// @notice openAccount modifier to check if the account is open.
+    modifier onlyOpenAccount() {
+        if (isAccountClosed) {
+            revert AccountAlreadyClosed();
+        }
+        _;
+    }
+
     /// @notice Initializes the contract with the Rath Foundation address, owner, and associated token.
     /// @param _rathFoundation Address of the Rath Foundation.
     /// @param _owner Address of the contract owner.
@@ -42,20 +50,14 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function submitAccountClosureRequest() external override onlyOwner {
-        if (isAccountClosed) {
-            revert AccountAlreadyClosed();
-        }
+    function submitAccountClosureRequest() external override onlyOwner onlyOpenAccount {
         isAccountClosingRequestOpen = true;
         accountClosingRequestTime = block.timestamp;
         emit RathAccountClosureRequested(owner(), address(token), accountClosingRequestTime);
     }
 
     /// @inheritdoc ITachyonAccount
-    function closeAccount() external override onlyOwner {
-        if (isAccountClosed) {
-            revert AccountAlreadyClosed();
-        }
+    function closeAccount() external override onlyOwner onlyOpenAccount {
 
         if (!isAccountClosingRequestOpen) {
             revert ClosureRequestRequired();
@@ -73,10 +75,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function deposit(uint256 amount) external payable override {
-        if (isAccountClosed) {
-            revert AccountAlreadyClosed();
-        }
+    function deposit(uint256 amount) external payable override onlyOpenAccount {
 
         if (amount == 0) {
             revert DepositAmountZero();
@@ -92,7 +91,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external override {
+    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external override onlyOpenAccount {
         if (msg.sender != RathFoundation) {
             revert OnlyRathFoundationCanCharge();
         }

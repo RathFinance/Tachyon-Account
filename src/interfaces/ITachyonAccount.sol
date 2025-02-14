@@ -47,7 +47,8 @@ interface ITachyonAccount {
     /// @notice Error thrown when the account Already is closed 
     error AccountAlreadyClosed();
 
-    /// @notice Error thrown when the account closure request is required.
+    /// @notice Error thrown when the account closure request is not initiated.
+    /// while closing the account
     error ClosureRequestRequired();
 
     /// @notice Initiates the account closing process by setting the request flag and timestamp.
