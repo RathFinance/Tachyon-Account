@@ -44,7 +44,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     /// @inheritdoc ITachyonAccount
     function submitAccountClosureRequest() external override onlyOwner {
         if (isAccountClosed) {
-            revert AccountClosed();
+            revert AccountAlreadyClosed();
         }
         isAccountClosingRequestOpen = true;
         accountClosingRequestTime = block.timestamp;
@@ -54,7 +54,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     /// @inheritdoc ITachyonAccount
     function closeAccount() external override onlyOwner {
         if (isAccountClosed) {
-            revert AccountClosed();
+            revert AccountAlreadyClosed();
         }
 
         if (!isAccountClosingRequestOpen) {
@@ -75,7 +75,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     /// @inheritdoc ITachyonAccount
     function deposit(uint256 amount) external payable override {
         if (isAccountClosed) {
-            revert AccountClosed();
+            revert AccountAlreadyClosed();
         }
 
         if (amount == 0) {
@@ -83,7 +83,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         }
         SafeTransferLib.safeTransferFrom(address(token), msg.sender, address(this), amount);
         balance += amount;
-        emit RathAccountDeposited(msg.sender, address(token), amount);
+        emit RathAccountDeposit(msg.sender, address(token), amount);
     }
 
     /// @inheritdoc ITachyonAccount

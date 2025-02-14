@@ -8,7 +8,7 @@ interface ITachyonAccount {
     /// @param sender The address initiating the deposit.
     /// @param token The address of the ERC20 token deposited.
     /// @param amount The amount of tokens deposited.
-    event RathAccountDeposited(address indexed sender, address token, uint256 amount);
+    event RathAccountDeposit(address indexed sender, address token, uint256 amount);
 
     /// @notice Emitted when an account closing request is initiated.
     /// @param sender The address of the account owner initiating the request.
@@ -44,8 +44,8 @@ interface ITachyonAccount {
     /// @notice Error thrown when the account is not authorized to charge the account.
     error OnlyRathFoundationCanCharge();
 
-    /// @notice Error thrown when the account is closed 
-    error AccountClosed();
+    /// @notice Error thrown when the account Already is closed 
+    error AccountAlreadyClosed();
 
     /// @notice Error thrown when the account closure request is required.
     error ClosureRequestRequired();
@@ -64,8 +64,8 @@ interface ITachyonAccount {
     /// @return A string representing the contract version.
     function version() external pure returns (string memory);
 
-    /// @notice Submits a bundle root hash and deducts the specified amount from the balance.
+    /// @notice Charges the account with the specified amount and bundle root hash.
     /// @param amount The amount to deduct from the balance.
-    /// @param batchId The root hash of the bundle being submitted.
-    function chargeAccount(uint256 amount, bytes32 batchId) external;
+    /// @param bundleRootHash The root hash of the bundle being submitted.
+    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external;
 }
