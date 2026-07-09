@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 /// @title ITachyonAccount
-/// @notice Interface for the TachyonAccount 
+/// @notice Interface for the TachyonAccount
 interface ITachyonAccount {
     /// @notice Emitted when a deposit is made to the account.
     /// @param sender The address initiating the deposit.
@@ -39,7 +39,7 @@ interface ITachyonAccount {
     /// @notice Error thrown when the account is not authorized to charge the account.
     error OnlyRathFoundationCanCharge();
 
-    /// @notice Error thrown when the account Already is closed 
+    /// @notice Error thrown when the account Already is closed
     error AccountAlreadyClosed();
 
     /// @notice Error thrown when the account is not closed.

@@ -66,10 +66,10 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         if (account.isClosureRequested) {
             revert ClosureRequestAlreadyOpen();
         }
-        
+
         account.isClosureRequested = true;
         account.closureRequestTime = block.timestamp;
-        
+
         emit AccountClosureRequested(msg.sender, block.timestamp);
     }
 
@@ -79,46 +79,46 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         if (!account.isClosureRequested) {
             revert ClosureRequestRequired();
         }
-        
+
         account.isClosureRequested = false;
         account.closureRequestTime = 0;
-        
+
         emit AccountClosureCancelled(msg.sender);
     }
 
     /// @inheritdoc ITachyonPaymaster
     function closeAccount() external override onlyOpenAccount(msg.sender) {
         UserAccount storage account = userAccounts[msg.sender];
-        
+
         if (!account.isClosureRequested) {
             revert ClosureRequestRequired();
         }
         if (block.timestamp < account.closureRequestTime + COOLING_PERIOD) {
             revert CoolingPeriodNotOver(block.timestamp, account.closureRequestTime + COOLING_PERIOD);
         }
-        
+
         account.isClosed = true;
         account.isClosureRequested = false;
-        
+
         emit AccountClosed(msg.sender);
     }
 
     /// @inheritdoc ITachyonPaymaster
     function withdraw(address token) external override {
         UserAccount storage account = userAccounts[msg.sender];
-        
+
         if (!account.isClosed) {
             revert AccountNotClosed();
         }
-        
+
         uint256 amount = balances[msg.sender][token];
         if (amount == 0) {
             revert InsufficientBalance();
         }
-        
+
         balances[msg.sender][token] = 0;
         SafeTransferLib.safeTransfer(token, msg.sender, amount);
-        
+
         emit TokenWithdrawn(msg.sender, token, amount);
     }
 
@@ -130,11 +130,29 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         if (amount == 0) {
             revert DepositAmountZero();
         }
-        
+
         SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
         balances[msg.sender][token] += amount;
-        
+
         emit Deposit(msg.sender, token, amount);
+    }
+
+    /// @inheritdoc ITachyonPaymaster
+    function depositFor(address user, address token, uint256 amount) external override onlyOpenAccount(user) {
+        if (user == address(0)) {
+            revert InvalidUser();
+        }
+        if (token == address(0)) {
+            revert InvalidToken();
+        }
+        if (amount == 0) {
+            revert DepositAmountZero();
+        }
+
+        SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
+        balances[user][token] += amount;
+
+        emit DepositFor(msg.sender, user, token, amount);
     }
 
     /// @inheritdoc ITachyonPaymaster
@@ -143,41 +161,37 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
     }
 
     /// @inheritdoc ITachyonPaymaster
-    function chargeAccount(
-        address user,
-        address token,
-        uint256 amount,
-        bytes32 bundleRootHash
-    ) external override onlyRathFoundation onlyOpenAccount(user) {
+    function chargeAccount(address user, address token, uint256 amount, bytes32 bundleRootHash)
+        external
+        override
+        onlyRathFoundation
+        onlyOpenAccount(user)
+    {
         if (balances[user][token] < amount) {
             revert InsufficientBalance();
         }
-        
+
         balances[user][token] -= amount;
         SafeTransferLib.safeTransfer(token, RathFoundation, amount);
-        
+
         emit AccountCharged(user, token, amount, bundleRootHash);
     }
 
     /// @inheritdoc ITachyonPaymaster
-    function rescueAccount(
-        address user,
-        address token,
-        uint256 amount
-    ) external override onlyRathFoundation {
+    function rescueAccount(address user, address token, uint256 amount) external override onlyRathFoundation {
         // For rescue, we check if the user account is closed
         // or we allow rescuing any accidentally sent ETH
         if (!userAccounts[user].isClosed && token != address(0)) {
             revert AccountNotClosed();
         }
-        
+
         if (token == address(0)) {
             // Rescue ETH
             SafeTransferLib.safeTransferETH(RathFoundation, amount);
         } else {
             SafeTransferLib.safeTransfer(token, RathFoundation, amount);
         }
-        
+
         emit AccountRescued(user, token, amount);
     }
 
@@ -187,13 +201,12 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
     }
 
     /// @inheritdoc ITachyonPaymaster
-    function getAccountStatus(
-        address user
-    ) external view override returns (
-        bool isClosed,
-        bool isClosureRequested,
-        uint256 closureRequestTime
-    ) {
+    function getAccountStatus(address user)
+        external
+        view
+        override
+        returns (bool isClosed, bool isClosureRequested, uint256 closureRequestTime)
+    {
         UserAccount storage account = userAccounts[user];
         return (account.isClosed, account.isClosureRequested, account.closureRequestTime);
     }
