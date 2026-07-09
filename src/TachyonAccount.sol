@@ -97,7 +97,12 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function chargeAccount(uint256 amount, bytes32 bundleRootHash) external override onlyRathFoundation onlyOpenAccount  {
+    function chargeAccount(uint256 amount, bytes32 bundleRootHash)
+        external
+        override
+        onlyRathFoundation
+        onlyOpenAccount
+    {
         if (msg.sender != RathFoundation) {
             revert OnlyRathFoundationCanCharge();
         }
@@ -106,7 +111,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
     }
 
     /// @inheritdoc ITachyonAccount
-    function rescueAccount(uint256 amount, address _token) external override onlyRathFoundation{
+    function rescueAccount(uint256 amount, address _token) external override onlyRathFoundation {
         // account should be closed
         if (!isAccountClosed) {
             revert AccountNotClosed();
