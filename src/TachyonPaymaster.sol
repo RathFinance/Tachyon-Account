@@ -8,6 +8,7 @@
 pragma solidity ^0.8.13;
 
 import "./interfaces/ITachyonPaymaster.sol";
+import {ERC20} from "solady/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
@@ -131,10 +132,13 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
             revert DepositAmountZero();
         }
 
+        uint256 balanceBefore = ERC20(token).balanceOf(address(this));
         SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
-        balances[msg.sender][token] += amount;
+        uint256 received = ERC20(token).balanceOf(address(this)) - balanceBefore;
 
-        emit Deposit(msg.sender, token, amount);
+        balances[msg.sender][token] += received;
+
+        emit Deposit(msg.sender, token, received);
     }
 
     /// @inheritdoc ITachyonPaymaster
@@ -149,10 +153,13 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
             revert DepositAmountZero();
         }
 
+        uint256 balanceBefore = ERC20(token).balanceOf(address(this));
         SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
-        balances[user][token] += amount;
+        uint256 received = ERC20(token).balanceOf(address(this)) - balanceBefore;
 
-        emit DepositFor(msg.sender, user, token, amount);
+        balances[user][token] += received;
+
+        emit DepositFor(msg.sender, user, token, received);
     }
 
     /// @inheritdoc ITachyonPaymaster
@@ -189,6 +196,13 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
             // Rescue ETH
             SafeTransferLib.safeTransferETH(RathFoundation, amount);
         } else {
+            // Rescuing an ERC20 must debit the user's tracked balance so the
+            // rescued amount cannot later be re-withdrawn by the user, and so
+            // it can never exceed what that user actually deposited.
+            if (balances[user][token] < amount) {
+                revert InsufficientBalance();
+            }
+            balances[user][token] -= amount;
             SafeTransferLib.safeTransfer(token, RathFoundation, amount);
         }
 

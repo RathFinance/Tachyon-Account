@@ -506,14 +506,12 @@ contract TachyonPaymasterTest is Test {
         assertEq(address(paymaster).balance, 0);
     }
 
-    /// @dev AUDIT FINDING (rescueAccount shared-pool drain): rescueAccount neither
-    ///      caps `amount` to the user's balance nor decrements `balances`. Once any
-    ///      single user is closed, the foundation can transfer the entire pooled
-    ///      token balance -- including funds backing OTHER, still-open users -- and
-    ///      the closed user's ledger entry survives. This test PINS the current
-    ///      (vulnerable) behavior; if rescueAccount is fixed to cap+decrement, it
-    ///      should be updated to expect a revert / bounded transfer instead.
-    function testRescueAccountCanDrainOtherUsersPool_AuditFinding() public {
+    /// @dev AUDIT FINDING FIX (rescueAccount shared-pool drain): rescueAccount now
+    ///      caps the ERC20 `amount` to the closed user's tracked balance and
+    ///      decrements `balances` on rescue. It can therefore neither drain funds
+    ///      backing OTHER, still-open users nor leave a stale ledger entry that the
+    ///      rescued user could re-withdraw. This test proves the fixed behavior.
+    function testRescueAccountCannotExceedUserBalanceOrDrainOtherUsersPool() public {
         vm.prank(USER);
         paymaster.deposit(address(token), 100e6);
         vm.prank(OTHER);
@@ -522,33 +520,42 @@ contract TachyonPaymasterTest is Test {
 
         _close(USER);
 
+        // Attempting to rescue more than USER's own balance must revert -- the
+        // OTHER user's 100e6 is not reachable via USER's rescue.
         vm.prank(RATH_FOUNDATION);
+        vm.expectRevert(ITachyonPaymaster.InsufficientBalance.selector);
         paymaster.rescueAccount(USER, address(token), 200e6);
 
-        assertEq(token.balanceOf(address(paymaster)), 0);
-        assertEq(token.balanceOf(RATH_FOUNDATION), 200e6);
+        // A rescue bounded to USER's balance succeeds and debits USER's ledger.
+        vm.prank(RATH_FOUNDATION);
+        paymaster.rescueAccount(USER, address(token), 100e6);
 
-        assertEq(paymaster.balanceOf(USER, address(token)), 100e6);
+        assertEq(token.balanceOf(RATH_FOUNDATION), 100e6);
+        assertEq(token.balanceOf(address(paymaster)), 100e6); // OTHER's funds intact
+        assertEq(paymaster.balanceOf(USER, address(token)), 0); // ledger decremented
 
+        // OTHER remains fully funded and can still withdraw everything.
         assertEq(paymaster.balanceOf(OTHER, address(token)), 100e6);
         vm.startPrank(OTHER);
         paymaster.submitAccountClosureRequest();
         skip(paymaster.COOLING_PERIOD());
         paymaster.closeAccount();
-        vm.expectRevert();
         paymaster.withdraw(address(token));
         vm.stopPrank();
+        // OTHER started with 1_000e6, deposited then withdrew 100e6 -> back to 1_000e6.
+        assertEq(token.balanceOf(OTHER), 1_000e6);
+        assertEq(token.balanceOf(address(paymaster)), 0);
     }
 
     // ---------------------------------------------------------------------
     // Non-standard tokens
     // ---------------------------------------------------------------------
 
-    /// @dev AUDIT FINDING (fee-on-transfer over-credit): deposit credits the
-    ///      requested `amount`, not the amount actually received, so the pool
-    ///      holds less than the sum of ledger balances. This test PINS that gap:
-    ///      the ledger reads 100e6 while the pool only received 90e6.
-    function testDepositOverCreditsFeeOnTransferToken_AuditFinding() public {
+    /// @dev AUDIT FINDING FIX (fee-on-transfer over-credit): deposit now credits the
+    ///      amount actually received (measured via balanceOf delta), not the
+    ///      requested `amount`. The ledger therefore matches the pool exactly, and
+    ///      the credited balance is fully withdrawable -- the pool stays solvent.
+    function testDepositCreditsAmountReceivedForFeeOnTransferToken() public {
         FeeOnTransferERC20 fee = new FeeOnTransferERC20();
         fee.mint(USER, 100e6);
 
@@ -557,16 +564,20 @@ contract TachyonPaymasterTest is Test {
         paymaster.deposit(address(fee), 100e6);
         vm.stopPrank();
 
-        assertEq(paymaster.balanceOf(USER, address(fee)), 100e6);
+        // Ledger credits only what the pool actually received (90e6 after 10% fee).
+        assertEq(paymaster.balanceOf(USER, address(fee)), 90e6);
         assertEq(fee.balanceOf(address(paymaster)), 90e6);
 
+        // The full credited balance is withdrawable -- pool is solvent, no revert.
         vm.startPrank(USER);
         paymaster.submitAccountClosureRequest();
         skip(paymaster.COOLING_PERIOD());
         paymaster.closeAccount();
-        vm.expectRevert();
         paymaster.withdraw(address(fee));
         vm.stopPrank();
+
+        assertEq(paymaster.balanceOf(USER, address(fee)), 0);
+        assertEq(fee.balanceOf(address(paymaster)), 0);
     }
 
     // Fuzz
