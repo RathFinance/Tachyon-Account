@@ -14,8 +14,7 @@ interface ITachyonPaymaster {
     /// @param payer The address funding the deposit.
     /// @param user The address whose balance is credited.
     /// @param token The address of the ERC20 token deposited.
-    /// @param amount The amount of tokens deposited.
-    event DepositFor(address indexed payer, address indexed user, address indexed token, uint256 amount);
+    /// @param amount The amount of tokens credited to the user (i.e., the amount actually received by the paymaster).
 
     /// @notice Emitted when an account closing request is initiated.
     /// @param user The address of the user initiating the request.
