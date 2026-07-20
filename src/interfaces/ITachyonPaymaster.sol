@@ -10,6 +10,12 @@ interface ITachyonPaymaster {
     /// @param amount The amount of tokens deposited.
     event Deposit(address indexed user, address indexed token, uint256 amount);
 
+    /// @notice Emitted when a payer deposits into another user's paymaster balance.
+    /// @param payer The address funding the deposit.
+    /// @param user The address whose balance is credited.
+    /// @param token The address of the ERC20 token deposited.
+    /// @param amount The amount of tokens credited to the user (i.e., the amount actually received by the paymaster).
+
     /// @notice Emitted when an account closing request is initiated.
     /// @param user The address of the user initiating the request.
     /// @param timestamp The timestamp when the request was initiated.
@@ -71,6 +77,9 @@ interface ITachyonPaymaster {
     /// @notice Error thrown when token address is invalid.
     error InvalidToken();
 
+    /// @notice Error thrown when user address is invalid.
+    error InvalidUser();
+
     /// @notice Initiates the account closing process for the user.
     function submitAccountClosureRequest() external;
 
@@ -88,6 +97,12 @@ interface ITachyonPaymaster {
     /// @param token The address of the ERC20 token to deposit.
     /// @param amount The amount of tokens to deposit.
     function deposit(address token, uint256 amount) external;
+
+    /// @notice Deposits a specified amount of tokens into another user's account.
+    /// @param user The address whose balance will be credited.
+    /// @param token The address of the ERC20 token to deposit.
+    /// @param amount The amount of tokens to deposit.
+    function depositFor(address user, address token, uint256 amount) external;
 
     /// @notice Returns the version of the contract.
     /// @return A string representing the contract version.
@@ -117,9 +132,8 @@ interface ITachyonPaymaster {
     /// @return isClosed Whether the account is closed.
     /// @return isClosureRequested Whether a closure request is pending.
     /// @return closureRequestTime The timestamp of the closure request.
-    function getAccountStatus(address user) external view returns (
-        bool isClosed,
-        bool isClosureRequested,
-        uint256 closureRequestTime
-    );
+    function getAccountStatus(address user)
+        external
+        view
+        returns (bool isClosed, bool isClosureRequested, uint256 closureRequestTime);
 }
