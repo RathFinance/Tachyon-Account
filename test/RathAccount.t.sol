@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
-import {ITachyonAccount} from "../src/interfaces/ITachyonAccount.sol";
-import {TachyonAccount} from "../src/TachyonAccount.sol";
+import {IRathAccount} from "../src/interfaces/IRathAccount.sol";
+import {RathAccount} from "../src/RathAccount.sol";
 
 contract MockERC20 is ERC20 {
     function name() public pure override returns (string memory) {
@@ -26,17 +26,17 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract TachyonAccountTest is Test {
+contract RathAccountTest is Test {
     address private constant RATH_FOUNDATION = address(0x1001);
     address private constant OWNER = address(0x1002);
     address private constant STRANGER = address(0x1003);
 
-    TachyonAccount private account;
+    RathAccount private account;
     MockERC20 private token;
 
     function setUp() public {
         token = new MockERC20();
-        account = new TachyonAccount(RATH_FOUNDATION, OWNER, address(token));
+        account = new RathAccount(RATH_FOUNDATION, OWNER, address(token));
 
         token.mint(OWNER, 1_000e6);
         token.mint(STRANGER, 1_000e6);
@@ -60,7 +60,7 @@ contract TachyonAccountTest is Test {
         uint256 amount = 100e6;
 
         vm.expectEmit(true, false, false, true, address(account));
-        emit ITachyonAccount.RathAccountDeposit(OWNER, address(token), amount);
+        emit IRathAccount.RathAccountDeposit(OWNER, address(token), amount);
 
         vm.prank(OWNER);
         account.deposit(amount);
@@ -81,7 +81,7 @@ contract TachyonAccountTest is Test {
     }
 
     function testDepositRevertsForZeroAmount() public {
-        vm.expectRevert(ITachyonAccount.DepositAmountZero.selector);
+        vm.expectRevert(IRathAccount.DepositAmountZero.selector);
         vm.prank(OWNER);
         account.deposit(0);
     }
@@ -89,7 +89,7 @@ contract TachyonAccountTest is Test {
     function testDepositRevertsWhenClosed() public {
         _closeAccount();
 
-        vm.expectRevert(ITachyonAccount.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathAccount.AccountAlreadyClosed.selector);
         vm.prank(OWNER);
         account.deposit(1);
     }
@@ -108,7 +108,7 @@ contract TachyonAccountTest is Test {
 
     function testSubmitClosureRequestSetsStateAndEmits() public {
         vm.expectEmit(true, false, false, true, address(account));
-        emit ITachyonAccount.RathAccountClosureRequested(OWNER, address(token), block.timestamp);
+        emit IRathAccount.RathAccountClosureRequested(OWNER, address(token), block.timestamp);
 
         vm.prank(OWNER);
         account.submitAccountClosureRequest();
@@ -126,7 +126,7 @@ contract TachyonAccountTest is Test {
     function testSubmitClosureRequestRevertsWhenClosed() public {
         _closeAccount();
 
-        vm.expectRevert(ITachyonAccount.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathAccount.AccountAlreadyClosed.selector);
         vm.prank(OWNER);
         account.submitAccountClosureRequest();
     }
@@ -141,7 +141,7 @@ contract TachyonAccountTest is Test {
         skip(account.COOLING_PERIOD());
 
         vm.expectEmit(true, false, false, true, address(account));
-        emit ITachyonAccount.RathAccountClosed(OWNER, 400e6);
+        emit IRathAccount.RathAccountClosed(OWNER, 400e6);
 
         vm.prank(OWNER);
         account.closeAccount();
@@ -162,7 +162,7 @@ contract TachyonAccountTest is Test {
     }
 
     function testCloseAccountRevertsWithoutClosureRequest() public {
-        vm.expectRevert(ITachyonAccount.ClosureRequestRequired.selector);
+        vm.expectRevert(IRathAccount.ClosureRequestRequired.selector);
         vm.prank(OWNER);
         account.closeAccount();
     }
@@ -177,7 +177,7 @@ contract TachyonAccountTest is Test {
         skip(account.COOLING_PERIOD() - 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ITachyonAccount.CoolingPeriodNotOver.selector, block.timestamp, requiredTime)
+            abi.encodeWithSelector(IRathAccount.CoolingPeriodNotOver.selector, block.timestamp, requiredTime)
         );
         vm.prank(OWNER);
         account.closeAccount();
@@ -199,7 +199,7 @@ contract TachyonAccountTest is Test {
     function testCloseAccountRevertsWhenAlreadyClosed() public {
         _closeAccount();
 
-        vm.expectRevert(ITachyonAccount.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathAccount.AccountAlreadyClosed.selector);
         vm.prank(OWNER);
         account.closeAccount();
     }
@@ -211,7 +211,7 @@ contract TachyonAccountTest is Test {
         bytes32 root = keccak256("bundle-1");
 
         vm.expectEmit(true, false, false, true, address(account));
-        emit ITachyonAccount.RathAccountCharged(OWNER, address(token), 200e6, root);
+        emit IRathAccount.RathAccountCharged(OWNER, address(token), 200e6, root);
 
         vm.prank(RATH_FOUNDATION);
         account.chargeAccount(200e6, root);
@@ -224,7 +224,7 @@ contract TachyonAccountTest is Test {
         vm.prank(OWNER);
         account.deposit(100e6);
 
-        vm.expectRevert(ITachyonAccount.OnlyRathFoundationCanCharge.selector);
+        vm.expectRevert(IRathAccount.OnlyRathFoundationCanCharge.selector);
         vm.prank(OWNER);
         account.chargeAccount(1, keccak256("x"));
     }
@@ -234,7 +234,7 @@ contract TachyonAccountTest is Test {
         account.deposit(100e6);
         _closeAccount();
 
-        vm.expectRevert(ITachyonAccount.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathAccount.AccountAlreadyClosed.selector);
         vm.prank(RATH_FOUNDATION);
         account.chargeAccount(1, keccak256("x"));
     }
@@ -264,13 +264,13 @@ contract TachyonAccountTest is Test {
     }
 
     function testRescueAccountRevertsWhenNotClosed() public {
-        vm.expectRevert(ITachyonAccount.AccountNotClosed.selector);
+        vm.expectRevert(IRathAccount.AccountNotClosed.selector);
         vm.prank(RATH_FOUNDATION);
         account.rescueAccount(1, address(token));
     }
 
     function testRescueAccountOnlyRathFoundation() public {
-        vm.expectRevert(ITachyonAccount.OnlyRathFoundationCanCharge.selector);
+        vm.expectRevert(IRathAccount.OnlyRathFoundationCanCharge.selector);
         vm.prank(OWNER);
         account.rescueAccount(1, address(token));
     }

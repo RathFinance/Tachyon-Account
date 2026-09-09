@@ -7,16 +7,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./interfaces/ITachyonPaymaster.sol";
+import "./interfaces/IRathPaymaster.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
-/// @title TachyonPaymaster
+/// @title RathPaymaster
 /// @author Aniket965, Rath.fi
 /// @notice Unified Paymaster contract that manages multiple users and multiple tokens.
 /// @dev Users can deposit multiple tokens, and the contract tracks balances per user per token.
-contract TachyonPaymaster is ITachyonPaymaster, Ownable {
+contract RathPaymaster is IRathPaymaster, Ownable {
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
     address public immutable RathFoundation;
 
@@ -61,7 +61,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         RathFoundation = _rathFoundation;
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function submitAccountClosureRequest() external override onlyOpenAccount(msg.sender) {
         UserAccount storage account = userAccounts[msg.sender];
         if (account.isClosureRequested) {
@@ -74,7 +74,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit AccountClosureRequested(msg.sender, block.timestamp);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function cancelAccountClosureRequest() external override onlyOpenAccount(msg.sender) {
         UserAccount storage account = userAccounts[msg.sender];
         if (!account.isClosureRequested) {
@@ -87,7 +87,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit AccountClosureCancelled(msg.sender);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function closeAccount() external override onlyOpenAccount(msg.sender) {
         UserAccount storage account = userAccounts[msg.sender];
 
@@ -104,7 +104,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit AccountClosed(msg.sender);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function withdraw(address token) external override {
         UserAccount storage account = userAccounts[msg.sender];
 
@@ -123,7 +123,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit TokenWithdrawn(msg.sender, token, amount);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function deposit(address token, uint256 amount) external override onlyOpenAccount(msg.sender) {
         if (token == address(0)) {
             revert InvalidToken();
@@ -141,7 +141,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit Deposit(msg.sender, token, received);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function depositFor(address user, address token, uint256 amount) external override onlyOpenAccount(user) {
         if (user == address(0)) {
             revert InvalidUser();
@@ -162,12 +162,12 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit DepositFor(msg.sender, user, token, received);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function version() external pure override returns (string memory) {
         return "0.0.1";
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function chargeAccount(address user, address token, uint256 amount, bytes32 bundleRootHash)
         external
         override
@@ -184,7 +184,7 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit AccountCharged(user, token, amount, bundleRootHash);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function rescueAccount(address user, address token, uint256 amount) external override onlyRathFoundation {
         // For rescue, we check if the user account is closed
         // or we allow rescuing any accidentally sent ETH
@@ -209,12 +209,12 @@ contract TachyonPaymaster is ITachyonPaymaster, Ownable {
         emit AccountRescued(user, token, amount);
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function balanceOf(address user, address token) external view override returns (uint256) {
         return balances[user][token];
     }
 
-    /// @inheritdoc ITachyonPaymaster
+    /// @inheritdoc IRathPaymaster
     function getAccountStatus(address user)
         external
         view

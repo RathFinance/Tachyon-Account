@@ -7,15 +7,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./interfaces/ITachyonAccount.sol";
+import "./interfaces/IRathAccount.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
-/// @title TachyonAccount
+/// @title RathAccount
 /// @author Aniket965, Rath.fi
-/// @notice Manages Tachyon accounts.
-contract TachyonAccount is ITachyonAccount, Ownable {
+/// @notice Manages Rath accounts.
+contract RathAccount is IRathAccount, Ownable {
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
     address public immutable RathFoundation;
 
@@ -60,14 +60,14 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         token = ERC20(_token);
     }
 
-    /// @inheritdoc ITachyonAccount
+    /// @inheritdoc IRathAccount
     function submitAccountClosureRequest() external override onlyOwner onlyOpenAccount {
         isAccountClosingRequestOpen = true;
         accountClosingRequestTime = block.timestamp;
         emit RathAccountClosureRequested(owner(), address(token), accountClosingRequestTime);
     }
 
-    /// @inheritdoc ITachyonAccount
+    /// @inheritdoc IRathAccount
     function closeAccount() external override onlyOwner onlyOpenAccount {
         if (!isAccountClosingRequestOpen) {
             revert ClosureRequestRequired();
@@ -82,7 +82,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         emit RathAccountClosed(owner(), amount);
     }
 
-    /// @inheritdoc ITachyonAccount
+    /// @inheritdoc IRathAccount
     function deposit(uint256 amount) external payable override onlyOpenAccount {
         if (amount == 0) {
             revert DepositAmountZero();
@@ -91,12 +91,12 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         emit RathAccountDeposit(msg.sender, address(token), amount);
     }
 
-    /// @inheritdoc ITachyonAccount
+    /// @inheritdoc IRathAccount
     function version() external pure override returns (string memory) {
         return "0.0.1";
     }
 
-    /// @inheritdoc ITachyonAccount
+    /// @inheritdoc IRathAccount
     function chargeAccount(uint256 amount, bytes32 bundleRootHash)
         external
         override
@@ -110,7 +110,7 @@ contract TachyonAccount is ITachyonAccount, Ownable {
         emit RathAccountCharged(owner(), address(token), amount, bundleRootHash);
     }
 
-    /// @inheritdoc ITachyonAccount
+    /// @inheritdoc IRathAccount
     function rescueAccount(uint256 amount, address _token) external override onlyRathFoundation {
         // account should be closed
         if (!isAccountClosed) {

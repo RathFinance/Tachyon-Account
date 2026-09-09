@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-/// @title ITachyonAccount
-/// @notice Interface for the TachyonAccount
-interface ITachyonAccount {
+/// @title IRathAccount
+/// @notice Interface for the RathAccount
+interface IRathAccount {
     /// @notice Emitted when a deposit is made to the account.
     /// @param sender The address initiating the deposit.
     /// @param token The address of the ERC20 token deposited.

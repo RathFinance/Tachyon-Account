@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
-import {ITachyonPaymaster} from "../src/interfaces/ITachyonPaymaster.sol";
-import {TachyonPaymaster} from "../src/TachyonPaymaster.sol";
+import {IRathPaymaster} from "../src/interfaces/IRathPaymaster.sol";
+import {RathPaymaster} from "../src/RathPaymaster.sol";
 
 contract MockERC20 is ERC20 {
     function name() public pure override returns (string memory) {
@@ -57,7 +57,7 @@ contract FeeOnTransferERC20 is ERC20 {
 /// @dev Token that re-enters the paymaster's `withdraw` during its own transfer,
 ///      to prove the withdraw path follows Checks-Effects-Interactions.
 contract ReentrantERC20 is ERC20 {
-    TachyonPaymaster public paymaster;
+    RathPaymaster public paymaster;
     bool private attacking;
 
     function name() public pure override returns (string memory) {
@@ -72,7 +72,7 @@ contract ReentrantERC20 is ERC20 {
         _mint(to, amount);
     }
 
-    function setPaymaster(TachyonPaymaster _paymaster) external {
+    function setPaymaster(RathPaymaster _paymaster) external {
         paymaster = _paymaster;
     }
 
@@ -89,18 +89,18 @@ contract ReentrantERC20 is ERC20 {
     }
 }
 
-contract TachyonPaymasterTest is Test {
+contract RathPaymasterTest is Test {
     address private constant RATH_FOUNDATION = address(0x1001);
     address private constant OWNER = address(0x1002);
     address private constant PAYER = address(0x1003);
     address private constant USER = address(0x1004);
     address private constant OTHER = address(0x1005);
 
-    TachyonPaymaster private paymaster;
+    RathPaymaster private paymaster;
     MockERC20 private token;
 
     function setUp() public {
-        paymaster = new TachyonPaymaster(RATH_FOUNDATION, OWNER);
+        paymaster = new RathPaymaster(RATH_FOUNDATION, OWNER);
         token = new MockERC20();
 
         token.mint(PAYER, 1_000e6);
@@ -128,7 +128,7 @@ contract TachyonPaymasterTest is Test {
         uint256 amount = 100e6;
 
         vm.expectEmit(true, true, false, true, address(paymaster));
-        emit ITachyonPaymaster.Deposit(USER, address(token), amount);
+        emit IRathPaymaster.Deposit(USER, address(token), amount);
 
         vm.prank(USER);
         paymaster.deposit(address(token), amount);
@@ -150,13 +150,13 @@ contract TachyonPaymasterTest is Test {
     }
 
     function testDepositRevertsForZeroToken() public {
-        vm.expectRevert(ITachyonPaymaster.InvalidToken.selector);
+        vm.expectRevert(IRathPaymaster.InvalidToken.selector);
         vm.prank(USER);
         paymaster.deposit(address(0), 1);
     }
 
     function testDepositRevertsForZeroAmount() public {
-        vm.expectRevert(ITachyonPaymaster.DepositAmountZero.selector);
+        vm.expectRevert(IRathPaymaster.DepositAmountZero.selector);
         vm.prank(USER);
         paymaster.deposit(address(token), 0);
     }
@@ -164,7 +164,7 @@ contract TachyonPaymasterTest is Test {
     function testDepositRevertsWhenAccountClosed() public {
         _close(USER);
 
-        vm.expectRevert(ITachyonPaymaster.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountAlreadyClosed.selector);
         vm.prank(USER);
         paymaster.deposit(address(token), 1);
     }
@@ -182,7 +182,7 @@ contract TachyonPaymasterTest is Test {
         uint256 amount = 250e6;
 
         vm.expectEmit(true, true, true, true, address(paymaster));
-        emit ITachyonPaymaster.DepositFor(PAYER, USER, address(token), amount);
+        emit IRathPaymaster.DepositFor(PAYER, USER, address(token), amount);
 
         vm.prank(PAYER);
         paymaster.depositFor(USER, address(token), amount);
@@ -205,19 +205,19 @@ contract TachyonPaymasterTest is Test {
     }
 
     function testDepositForRevertsForZeroUser() public {
-        vm.expectRevert(ITachyonPaymaster.InvalidUser.selector);
+        vm.expectRevert(IRathPaymaster.InvalidUser.selector);
         vm.prank(PAYER);
         paymaster.depositFor(address(0), address(token), 1);
     }
 
     function testDepositForRevertsForZeroToken() public {
-        vm.expectRevert(ITachyonPaymaster.InvalidToken.selector);
+        vm.expectRevert(IRathPaymaster.InvalidToken.selector);
         vm.prank(PAYER);
         paymaster.depositFor(USER, address(0), 1);
     }
 
     function testDepositForRevertsForZeroAmount() public {
-        vm.expectRevert(ITachyonPaymaster.DepositAmountZero.selector);
+        vm.expectRevert(IRathPaymaster.DepositAmountZero.selector);
         vm.prank(PAYER);
         paymaster.depositFor(USER, address(token), 0);
     }
@@ -225,7 +225,7 @@ contract TachyonPaymasterTest is Test {
     function testDepositForRevertsForClosedTargetAccount() public {
         _close(USER);
 
-        vm.expectRevert(ITachyonPaymaster.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountAlreadyClosed.selector);
         vm.prank(PAYER);
         paymaster.depositFor(USER, address(token), 1);
     }
@@ -243,7 +243,7 @@ contract TachyonPaymasterTest is Test {
 
     function testSubmitClosureRequestSetsStateAndEmits() public {
         vm.expectEmit(true, false, false, true, address(paymaster));
-        emit ITachyonPaymaster.AccountClosureRequested(USER, block.timestamp);
+        emit IRathPaymaster.AccountClosureRequested(USER, block.timestamp);
 
         vm.prank(USER);
         paymaster.submitAccountClosureRequest();
@@ -258,7 +258,7 @@ contract TachyonPaymasterTest is Test {
         vm.startPrank(USER);
         paymaster.submitAccountClosureRequest();
 
-        vm.expectRevert(ITachyonPaymaster.ClosureRequestAlreadyOpen.selector);
+        vm.expectRevert(IRathPaymaster.ClosureRequestAlreadyOpen.selector);
         paymaster.submitAccountClosureRequest();
         vm.stopPrank();
     }
@@ -268,7 +268,7 @@ contract TachyonPaymasterTest is Test {
         paymaster.submitAccountClosureRequest();
 
         vm.expectEmit(true, false, false, false, address(paymaster));
-        emit ITachyonPaymaster.AccountClosureCancelled(USER);
+        emit IRathPaymaster.AccountClosureCancelled(USER);
         paymaster.cancelAccountClosureRequest();
         vm.stopPrank();
 
@@ -278,7 +278,7 @@ contract TachyonPaymasterTest is Test {
     }
 
     function testCancelClosureRequestRevertsWhenNoneOpen() public {
-        vm.expectRevert(ITachyonPaymaster.ClosureRequestRequired.selector);
+        vm.expectRevert(IRathPaymaster.ClosureRequestRequired.selector);
         vm.prank(USER);
         paymaster.cancelAccountClosureRequest();
     }
@@ -298,7 +298,7 @@ contract TachyonPaymasterTest is Test {
     }
 
     function testCloseAccountRevertsWithoutRequest() public {
-        vm.expectRevert(ITachyonPaymaster.ClosureRequestRequired.selector);
+        vm.expectRevert(IRathPaymaster.ClosureRequestRequired.selector);
         vm.prank(USER);
         paymaster.closeAccount();
     }
@@ -311,7 +311,7 @@ contract TachyonPaymasterTest is Test {
         skip(paymaster.COOLING_PERIOD() - 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ITachyonPaymaster.CoolingPeriodNotOver.selector, block.timestamp, required)
+            abi.encodeWithSelector(IRathPaymaster.CoolingPeriodNotOver.selector, block.timestamp, required)
         );
         vm.prank(USER);
         paymaster.closeAccount();
@@ -323,7 +323,7 @@ contract TachyonPaymasterTest is Test {
         skip(paymaster.COOLING_PERIOD());
 
         vm.expectEmit(true, false, false, false, address(paymaster));
-        emit ITachyonPaymaster.AccountClosed(USER);
+        emit IRathPaymaster.AccountClosed(USER);
         vm.prank(USER);
         paymaster.closeAccount();
 
@@ -335,7 +335,7 @@ contract TachyonPaymasterTest is Test {
     function testCloseAccountRevertsWhenAlreadyClosed() public {
         _close(USER);
 
-        vm.expectRevert(ITachyonPaymaster.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountAlreadyClosed.selector);
         vm.prank(USER);
         paymaster.closeAccount();
     }
@@ -343,7 +343,7 @@ contract TachyonPaymasterTest is Test {
     function testClosureRequestRevertsWhenAlreadyClosed() public {
         _close(USER);
 
-        vm.expectRevert(ITachyonPaymaster.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountAlreadyClosed.selector);
         vm.prank(USER);
         paymaster.submitAccountClosureRequest();
     }
@@ -354,7 +354,7 @@ contract TachyonPaymasterTest is Test {
         _close(USER);
 
         vm.expectEmit(true, true, false, true, address(paymaster));
-        emit ITachyonPaymaster.TokenWithdrawn(USER, address(token), 300e6);
+        emit IRathPaymaster.TokenWithdrawn(USER, address(token), 300e6);
 
         vm.prank(USER);
         paymaster.withdraw(address(token));
@@ -368,7 +368,7 @@ contract TachyonPaymasterTest is Test {
         vm.prank(USER);
         paymaster.deposit(address(token), 100e6);
 
-        vm.expectRevert(ITachyonPaymaster.AccountNotClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountNotClosed.selector);
         vm.prank(USER);
         paymaster.withdraw(address(token));
     }
@@ -376,7 +376,7 @@ contract TachyonPaymasterTest is Test {
     function testWithdrawRevertsForZeroBalance() public {
         _close(USER);
 
-        vm.expectRevert(ITachyonPaymaster.InsufficientBalance.selector);
+        vm.expectRevert(IRathPaymaster.InsufficientBalance.selector);
         vm.prank(USER);
         paymaster.withdraw(address(token));
     }
@@ -389,7 +389,7 @@ contract TachyonPaymasterTest is Test {
         vm.startPrank(USER);
         paymaster.withdraw(address(token));
 
-        vm.expectRevert(ITachyonPaymaster.InsufficientBalance.selector);
+        vm.expectRevert(IRathPaymaster.InsufficientBalance.selector);
         paymaster.withdraw(address(token));
         vm.stopPrank();
     }
@@ -430,7 +430,7 @@ contract TachyonPaymasterTest is Test {
 
         bytes32 root = keccak256("bundle-1");
         vm.expectEmit(true, true, false, true, address(paymaster));
-        emit ITachyonPaymaster.AccountCharged(USER, address(token), 200e6, root);
+        emit IRathPaymaster.AccountCharged(USER, address(token), 200e6, root);
 
         vm.prank(RATH_FOUNDATION);
         paymaster.chargeAccount(USER, address(token), 200e6, root);
@@ -443,7 +443,7 @@ contract TachyonPaymasterTest is Test {
         vm.prank(USER);
         paymaster.deposit(address(token), 100e6);
 
-        vm.expectRevert(ITachyonPaymaster.OnlyRathFoundationCanCharge.selector);
+        vm.expectRevert(IRathPaymaster.OnlyRathFoundationCanCharge.selector);
         vm.prank(USER);
         paymaster.chargeAccount(USER, address(token), 1, keccak256("x"));
     }
@@ -452,7 +452,7 @@ contract TachyonPaymasterTest is Test {
         vm.prank(USER);
         paymaster.deposit(address(token), 100e6);
 
-        vm.expectRevert(ITachyonPaymaster.InsufficientBalance.selector);
+        vm.expectRevert(IRathPaymaster.InsufficientBalance.selector);
         vm.prank(RATH_FOUNDATION);
         paymaster.chargeAccount(USER, address(token), 100e6 + 1, keccak256("x"));
     }
@@ -462,7 +462,7 @@ contract TachyonPaymasterTest is Test {
         paymaster.deposit(address(token), 100e6);
         _close(USER);
 
-        vm.expectRevert(ITachyonPaymaster.AccountAlreadyClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountAlreadyClosed.selector);
         vm.prank(RATH_FOUNDATION);
         paymaster.chargeAccount(USER, address(token), 1, keccak256("x"));
     }
@@ -482,7 +482,7 @@ contract TachyonPaymasterTest is Test {
     }
 
     function testRescueAccountRevertsForNonFoundation() public {
-        vm.expectRevert(ITachyonPaymaster.OnlyRathFoundationCanCharge.selector);
+        vm.expectRevert(IRathPaymaster.OnlyRathFoundationCanCharge.selector);
         vm.prank(USER);
         paymaster.rescueAccount(USER, address(token), 1);
     }
@@ -491,7 +491,7 @@ contract TachyonPaymasterTest is Test {
         vm.prank(USER);
         paymaster.deposit(address(token), 100e6);
 
-        vm.expectRevert(ITachyonPaymaster.AccountNotClosed.selector);
+        vm.expectRevert(IRathPaymaster.AccountNotClosed.selector);
         vm.prank(RATH_FOUNDATION);
         paymaster.rescueAccount(USER, address(token), 1);
     }
@@ -523,7 +523,7 @@ contract TachyonPaymasterTest is Test {
         // Attempting to rescue more than USER's own balance must revert -- the
         // OTHER user's 100e6 is not reachable via USER's rescue.
         vm.prank(RATH_FOUNDATION);
-        vm.expectRevert(ITachyonPaymaster.InsufficientBalance.selector);
+        vm.expectRevert(IRathPaymaster.InsufficientBalance.selector);
         paymaster.rescueAccount(USER, address(token), 200e6);
 
         // A rescue bounded to USER's balance succeeds and debits USER's ledger.
