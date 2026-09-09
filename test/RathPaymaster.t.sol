@@ -310,9 +310,7 @@ contract RathPaymasterTest is Test {
         uint256 required = block.timestamp + paymaster.COOLING_PERIOD();
         skip(paymaster.COOLING_PERIOD() - 1);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IRathPaymaster.CoolingPeriodNotOver.selector, block.timestamp, required)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IRathPaymaster.CoolingPeriodNotOver.selector, block.timestamp, required));
         vm.prank(USER);
         paymaster.closeAccount();
     }
