@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-/// @title ITachyonPaymaster
-/// @notice Interface for the unified TachyonPaymaster that manages multiple users and tokens
-interface ITachyonPaymaster {
+/// @title IRathPaymaster
+/// @notice Interface for the unified RathPaymaster that manages multiple users and tokens
+interface IRathPaymaster {
     /// @notice Emitted when a deposit is made to the paymaster.
     /// @param user The address of the user depositing.
     /// @param token The address of the ERC20 token deposited.
@@ -15,6 +15,7 @@ interface ITachyonPaymaster {
     /// @param user The address whose balance is credited.
     /// @param token The address of the ERC20 token deposited.
     /// @param amount The amount of tokens credited to the user (i.e., the amount actually received by the paymaster).
+    event DepositFor(address indexed payer, address indexed user, address indexed token, uint256 amount);
 
     /// @notice Emitted when an account closing request is initiated.
     /// @param user The address of the user initiating the request.
