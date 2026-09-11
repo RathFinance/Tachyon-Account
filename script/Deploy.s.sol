@@ -2,32 +2,37 @@
 pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
-import {RathAccount} from "../src/RathAccount.sol";
+import {console} from "forge-std/console.sol";
 import {RathPaymaster} from "../src/RathPaymaster.sol";
-
-contract DeployRathAccount is Script {
-    address constant token = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address constant rathFoundation = 0xEafAB774Ab1A3b5748F3eA694F449039E09932BB;
-    address constant Owner = 0x55019eEDab2AcB5580bAd02454B22aDf5C37952A;
-
-    function run() external {
-        uint256 deployerPrivateKey = vm.envUint("KEY");
-        vm.startBroadcast(deployerPrivateKey);
-
-        new RathAccount(rathFoundation, Owner, token);
-        vm.stopBroadcast();
-    }
-}
+import {ICREATE3Factory} from "./ICreate3Factory.sol";
 
 contract DeployRathPaymaster is Script {
-    address constant rathFoundation = 0xEafAB774Ab1A3b5748F3eA694F449039E09932BB;
-    address constant Owner = 0x55019eEDab2AcB5580bAd02454B22aDf5C37952A;
+    address internal constant CREATE3_FACTORY = 0xeC4086C8c4807CC5c7E9D07Fc4228A4590a5104b;
+    address internal constant RATH_FOUNDATION = 0xEafAB774Ab1A3b5748F3eA694F449039E09932BB;
+    address internal constant OWNER = 0x55019eEDab2AcB5580bAd02454B22aDf5C37952A;
+    bytes32 internal constant SALT = keccak256("rath.fi.paymaster.contract");
 
-    function run() external {
+    function run() external returns (RathPaymaster paymaster) {
         uint256 deployerPrivateKey = vm.envUint("KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+        ICREATE3Factory create3 = ICREATE3Factory(CREATE3_FACTORY);
+        address predicted = create3.getDeployed(deployer, SALT);
+
+        console.log("CREATE3 salt:", vm.toString(SALT));
+        console.log("Deployer:", deployer);
+        console.log("Predicted RathPaymaster:", predicted);
+
         vm.startBroadcast(deployerPrivateKey);
 
-        new RathPaymaster(rathFoundation, Owner);
+        address deployed = create3.deploy(
+            SALT, abi.encodePacked(type(RathPaymaster).creationCode, abi.encode(RATH_FOUNDATION, OWNER))
+        );
+
         vm.stopBroadcast();
+
+        require(deployed == predicted, "unexpected CREATE3 deployment address");
+        console.log("RathPaymaster deployed at:", deployed);
+
+        paymaster = RathPaymaster(payable(deployed));
     }
 }

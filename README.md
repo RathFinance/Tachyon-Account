@@ -1,9 +1,9 @@
 ## Rath Account
 
-**Smart contracts for Rath Account and Rath Paymaster.**
+**Smart contracts for the Rath Paymaster.**
 
-- `RathAccount` is the per-user account charged directly for Tachyon relayer usage.
-- `RathPaymaster` is the shared multi-user contract used by Rath Account API billing.
+- `RathPaymaster` is the only contract deployed and used for Rath Account API billing.
+- `RathAccount`, its interface, and its tests are retained only as legacy reference and are not deployed or used.
 
 ### Build
 
