@@ -7,18 +7,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./interfaces/IRathPaymaster.sol";
+import {IRathPaymaster} from "./interfaces/IRathPaymaster.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 
 /// @title RathPaymaster
-/// @author Aniket965, Rath.fi
+/// @author Team@rath.fi
 /// @notice Unified Paymaster contract that manages multiple users and multiple tokens.
 /// @dev Users can deposit multiple tokens, and the contract tracks balances per user per token.
 contract RathPaymaster is IRathPaymaster, Ownable {
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
-    address public immutable RathFoundation;
+    address public immutable RATH_FOUNDATION;
 
     /// @notice Duration of the cooling period required before an account can be closed.
     uint256 public constant COOLING_PERIOD = 7 days;
@@ -39,18 +39,29 @@ contract RathPaymaster is IRathPaymaster, Ownable {
     /// @notice Modifier to check if the user's account is open.
     /// @param user The address of the user.
     modifier onlyOpenAccount(address user) {
-        if (userAccounts[user].isClosed) {
-            revert AccountAlreadyClosed();
-        }
+        _onlyOpenAccount(user);
         _;
     }
 
     /// @notice Modifier to check if the caller is RathFoundation.
     modifier onlyRathFoundation() {
-        if (msg.sender != RathFoundation) {
+        _onlyRathFoundation();
+        _;
+    }
+
+    /// @notice Reverts unless the given user's account is still open.
+    /// @param user The address of the user.
+    function _onlyOpenAccount(address user) private view {
+        if (userAccounts[user].isClosed) {
+            revert AccountAlreadyClosed();
+        }
+    }
+
+    /// @notice Reverts unless the caller is RathFoundation.
+    function _onlyRathFoundation() private view {
+        if (msg.sender != RATH_FOUNDATION) {
             revert OnlyRathFoundationCanCharge();
         }
-        _;
     }
 
     /// @notice Initializes the contract with the Rath Foundation address and owner.
@@ -58,7 +69,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
     /// @param _owner Address of the contract owner.
     constructor(address _rathFoundation, address _owner) {
         _initializeOwner(_owner);
-        RathFoundation = _rathFoundation;
+        RATH_FOUNDATION = _rathFoundation;
     }
 
     /// @inheritdoc IRathPaymaster
@@ -123,26 +134,11 @@ contract RathPaymaster is IRathPaymaster, Ownable {
         emit TokenWithdrawn(msg.sender, token, amount);
     }
 
-    /// @inheritdoc IRathPaymaster
-    function deposit(address token, uint256 amount) external override onlyOpenAccount(msg.sender) {
-        if (token == address(0)) {
-            revert InvalidToken();
-        }
-        if (amount == 0) {
-            revert DepositAmountZero();
-        }
-
-        uint256 balanceBefore = ERC20(token).balanceOf(address(this));
-        SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
-        uint256 received = ERC20(token).balanceOf(address(this)) - balanceBefore;
-
-        balances[msg.sender][token] += received;
-
-        emit Deposit(msg.sender, token, received);
-    }
-
-    /// @inheritdoc IRathPaymaster
-    function depositFor(address user, address token, uint256 amount) external override onlyOpenAccount(user) {
+    /// @notice Validates the common parameters shared by every deposit entrypoint.
+    /// @param user The address whose balance will be credited.
+    /// @param token The address of the ERC20 token to deposit.
+    /// @param amount The amount of tokens to deposit.
+    function _validateDeposit(address user, address token, uint256 amount) private pure {
         if (user == address(0)) {
             revert InvalidUser();
         }
@@ -152,14 +148,77 @@ contract RathPaymaster is IRathPaymaster, Ownable {
         if (amount == 0) {
             revert DepositAmountZero();
         }
+    }
 
+    /// @notice Pulls `amount` of `token` from the caller and credits what was actually received to `user`.
+    /// @dev Measures the balance delta so fee-on-transfer tokens credit only what the paymaster received.
+    /// @param user The address whose balance will be credited.
+    /// @param token The address of the ERC20 token to deposit.
+    /// @param amount The amount of tokens to pull from the caller.
+    function _deposit(address user, address token, uint256 amount) private {
         uint256 balanceBefore = ERC20(token).balanceOf(address(this));
         SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
         uint256 received = ERC20(token).balanceOf(address(this)) - balanceBefore;
 
         balances[user][token] += received;
 
-        emit DepositFor(msg.sender, user, token, received);
+        emit Deposit(msg.sender, user, token, received);
+    }
+
+    /// @notice Consumes an EIP-2612 permit signed by the caller, approving this contract for `amount`.
+    /// @dev A permit that has already been consumed (e.g. front-run) is tolerated as long as the
+    ///      resulting allowance still covers `amount`, so the deposit itself cannot be griefed.
+    /// @param token The address of the ERC20 token being permitted.
+    /// @param amount The allowance the permit grants to this contract.
+    /// @param deadline The permit expiry timestamp.
+    /// @param v The signature `v` component.
+    /// @param r The signature `r` component.
+    /// @param s The signature `s` component.
+    function _permit(address token, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s) private {
+        try ERC20(token).permit(msg.sender, address(this), amount, deadline, v, r, s) {}
+        catch {
+            if (ERC20(token).allowance(msg.sender, address(this)) < amount) {
+                revert PermitFailed();
+            }
+        }
+    }
+
+    /// @inheritdoc IRathPaymaster
+    function deposit(address token, uint256 amount) external override onlyOpenAccount(msg.sender) {
+        _validateDeposit(msg.sender, token, amount);
+        _deposit(msg.sender, token, amount);
+    }
+
+    /// @inheritdoc IRathPaymaster
+    function depositWithPermit(address token, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        override
+        onlyOpenAccount(msg.sender)
+    {
+        _validateDeposit(msg.sender, token, amount);
+        _permit(token, amount, deadline, v, r, s);
+        _deposit(msg.sender, token, amount);
+    }
+
+    /// @inheritdoc IRathPaymaster
+    function depositFor(address user, address token, uint256 amount) external override onlyOpenAccount(user) {
+        _validateDeposit(user, token, amount);
+        _deposit(user, token, amount);
+    }
+
+    /// @inheritdoc IRathPaymaster
+    function depositForWithPermit(
+        address user,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external override onlyOpenAccount(user) {
+        _validateDeposit(user, token, amount);
+        _permit(token, amount, deadline, v, r, s);
+        _deposit(user, token, amount);
     }
 
     /// @inheritdoc IRathPaymaster
@@ -179,7 +238,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
         }
 
         balances[user][token] -= amount;
-        SafeTransferLib.safeTransfer(token, RathFoundation, amount);
+        SafeTransferLib.safeTransfer(token, RATH_FOUNDATION, amount);
 
         emit AccountCharged(user, token, amount, bundleRootHash);
     }
@@ -194,7 +253,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
 
         if (token == address(0)) {
             // Rescue ETH
-            SafeTransferLib.safeTransferETH(RathFoundation, amount);
+            SafeTransferLib.safeTransferETH(RATH_FOUNDATION, amount);
         } else {
             // Rescuing an ERC20 must debit the user's tracked balance so the
             // rescued amount cannot later be re-withdrawn by the user, and so
@@ -203,7 +262,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
                 revert InsufficientBalance();
             }
             balances[user][token] -= amount;
-            SafeTransferLib.safeTransfer(token, RathFoundation, amount);
+            SafeTransferLib.safeTransfer(token, RATH_FOUNDATION, amount);
         }
 
         emit AccountRescued(user, token, amount);

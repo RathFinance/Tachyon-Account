@@ -9,7 +9,7 @@ import {ICREATE3Factory} from "./ICreate3Factory.sol";
 contract DeployRathPaymaster is Script {
     address internal constant CREATE3_FACTORY = 0xeC4086C8c4807CC5c7E9D07Fc4228A4590a5104b;
     address internal constant RATH_FOUNDATION = 0xEafAB774Ab1A3b5748F3eA694F449039E09932BB;
-    address internal constant OWNER = 0x55019eEDab2AcB5580bAd02454B22aDf5C37952A;
+    address internal constant OWNER = 0xEb53041450537aC14EC44fF00b82dB214e45F4bf;
     bytes32 internal constant SALT = keccak256("rath.fi.paymaster.contract");
 
     function run() external returns (RathPaymaster paymaster) {

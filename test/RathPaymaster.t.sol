@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
-import {Ownable} from "solady/auth/Ownable.sol";
 
 import {IRathPaymaster} from "../src/interfaces/IRathPaymaster.sol";
 import {RathPaymaster} from "../src/RathPaymaster.sol";
@@ -96,12 +95,22 @@ contract RathPaymasterTest is Test {
     address private constant USER = address(0x1004);
     address private constant OTHER = address(0x1005);
 
+    /// @dev Key-backed account used for EIP-2612 permit signatures.
+    uint256 private constant SIGNER_KEY = 0xA11CE;
+
+    bytes32 private constant PERMIT_TYPEHASH =
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+
     RathPaymaster private paymaster;
     MockERC20 private token;
+    address private signer;
 
     function setUp() public {
         paymaster = new RathPaymaster(RATH_FOUNDATION, OWNER);
         token = new MockERC20();
+
+        signer = vm.addr(SIGNER_KEY);
+        token.mint(signer, 1_000e6);
 
         token.mint(PAYER, 1_000e6);
         token.mint(USER, 1_000e6);
@@ -118,7 +127,7 @@ contract RathPaymasterTest is Test {
     }
 
     function testConstructorSetsRolesAndConstants() public view {
-        assertEq(paymaster.RathFoundation(), RATH_FOUNDATION);
+        assertEq(paymaster.RATH_FOUNDATION(), RATH_FOUNDATION);
         assertEq(paymaster.owner(), OWNER);
         assertEq(paymaster.COOLING_PERIOD(), 7 days);
         assertEq(paymaster.version(), "0.0.1");
@@ -128,7 +137,7 @@ contract RathPaymasterTest is Test {
         uint256 amount = 100e6;
 
         vm.expectEmit(true, true, false, true, address(paymaster));
-        emit IRathPaymaster.Deposit(USER, address(token), amount);
+        emit IRathPaymaster.Deposit(USER, USER, address(token), amount);
 
         vm.prank(USER);
         paymaster.deposit(address(token), amount);
@@ -178,11 +187,11 @@ contract RathPaymasterTest is Test {
         paymaster.deposit(address(token), 1e6);
     }
 
-    function testDepositForCreditsTargetFromPayerAndEmitsDepositFor() public {
+    function testDepositForCreditsTargetFromPayerAndEmitsDeposit() public {
         uint256 amount = 250e6;
 
         vm.expectEmit(true, true, true, true, address(paymaster));
-        emit IRathPaymaster.DepositFor(PAYER, USER, address(token), amount);
+        emit IRathPaymaster.Deposit(PAYER, USER, address(token), amount);
 
         vm.prank(PAYER);
         paymaster.depositFor(USER, address(token), amount);
@@ -239,6 +248,106 @@ contract RathPaymasterTest is Test {
         paymaster.depositFor(USER, address(token), 10e6);
 
         assertEq(paymaster.balanceOf(USER, address(token)), 10e6);
+    }
+
+    /// @dev Signs an EIP-2612 permit for `token` from `SIGNER_KEY`.
+    function _signPermit(address spender, uint256 value, uint256 deadline)
+        private
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
+        bytes32 structHash =
+            keccak256(abi.encode(PERMIT_TYPEHASH, signer, spender, value, token.nonces(signer), deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", token.DOMAIN_SEPARATOR(), structHash));
+        (v, r, s) = vm.sign(SIGNER_KEY, digest);
+    }
+
+    function testDepositWithPermitCreditsCallerWithoutPriorApproval() public {
+        uint256 amount = 100e6;
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(address(paymaster), amount, deadline);
+
+        assertEq(token.allowance(signer, address(paymaster)), 0);
+
+        vm.expectEmit(true, true, true, true, address(paymaster));
+        emit IRathPaymaster.Deposit(signer, signer, address(token), amount);
+
+        vm.prank(signer);
+        paymaster.depositWithPermit(address(token), amount, deadline, v, r, s);
+
+        assertEq(paymaster.balanceOf(signer, address(token)), amount);
+        assertEq(token.balanceOf(address(paymaster)), amount);
+        assertEq(token.balanceOf(signer), 900e6);
+        assertEq(token.allowance(signer, address(paymaster)), 0);
+    }
+
+    function testDepositForWithPermitCreditsTargetFromPayer() public {
+        uint256 amount = 250e6;
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(address(paymaster), amount, deadline);
+
+        vm.expectEmit(true, true, true, true, address(paymaster));
+        emit IRathPaymaster.Deposit(signer, USER, address(token), amount);
+
+        vm.prank(signer);
+        paymaster.depositForWithPermit(USER, address(token), amount, deadline, v, r, s);
+
+        assertEq(paymaster.balanceOf(USER, address(token)), amount);
+        assertEq(paymaster.balanceOf(signer, address(token)), 0);
+        assertEq(token.balanceOf(signer), 750e6);
+    }
+
+    /// @dev A permit front-run by someone else still leaves a sufficient allowance,
+    ///      so the deposit must go through rather than revert on the consumed nonce.
+    function testDepositWithPermitToleratesFrontRunPermit() public {
+        uint256 amount = 100e6;
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(address(paymaster), amount, deadline);
+
+        // Someone else submits the same permit first, consuming the nonce.
+        vm.prank(OTHER);
+        token.permit(signer, address(paymaster), amount, deadline, v, r, s);
+
+        vm.prank(signer);
+        paymaster.depositWithPermit(address(token), amount, deadline, v, r, s);
+
+        assertEq(paymaster.balanceOf(signer, address(token)), amount);
+    }
+
+    function testDepositWithPermitRevertsWhenPermitInvalidAndAllowanceInsufficient() public {
+        uint256 amount = 100e6;
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(address(paymaster), amount, deadline);
+
+        // Expired by the time the deposit lands, with no standing approval to fall back on.
+        vm.warp(deadline + 1);
+
+        vm.expectRevert(IRathPaymaster.PermitFailed.selector);
+        vm.prank(signer);
+        paymaster.depositWithPermit(address(token), amount, deadline, v, r, s);
+    }
+
+    /// @dev Parameter validation runs before the permit is consumed.
+    function testDepositWithPermitRevertsForZeroToken() public {
+        vm.expectRevert(IRathPaymaster.InvalidToken.selector);
+        vm.prank(signer);
+        paymaster.depositWithPermit(address(0), 1, block.timestamp + 1 hours, 0, bytes32(0), bytes32(0));
+    }
+
+    function testDepositForWithPermitRevertsForZeroUser() public {
+        vm.expectRevert(IRathPaymaster.InvalidUser.selector);
+        vm.prank(signer);
+        paymaster.depositForWithPermit(
+            address(0), address(token), 1, block.timestamp + 1 hours, 0, bytes32(0), bytes32(0)
+        );
+    }
+
+    function testDepositForWithPermitRevertsForClosedTargetAccount() public {
+        _close(USER);
+
+        vm.expectRevert(IRathPaymaster.AccountAlreadyClosed.selector);
+        vm.prank(signer);
+        paymaster.depositForWithPermit(USER, address(token), 1, block.timestamp + 1 hours, 0, bytes32(0), bytes32(0));
     }
 
     function testSubmitClosureRequestSetsStateAndEmits() public {

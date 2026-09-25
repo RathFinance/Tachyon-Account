@@ -5,17 +5,11 @@ pragma solidity ^0.8.13;
 /// @notice Interface for the unified RathPaymaster that manages multiple users and tokens
 interface IRathPaymaster {
     /// @notice Emitted when a deposit is made to the paymaster.
-    /// @param user The address of the user depositing.
-    /// @param token The address of the ERC20 token deposited.
-    /// @param amount The amount of tokens deposited.
-    event Deposit(address indexed user, address indexed token, uint256 amount);
-
-    /// @notice Emitted when a payer deposits into another user's paymaster balance.
-    /// @param payer The address funding the deposit.
+    /// @param payer The address funding the deposit (equal to `user` for self-deposits).
     /// @param user The address whose balance is credited.
     /// @param token The address of the ERC20 token deposited.
     /// @param amount The amount of tokens credited to the user (i.e., the amount actually received by the paymaster).
-    event DepositFor(address indexed payer, address indexed user, address indexed token, uint256 amount);
+    event Deposit(address indexed payer, address indexed user, address indexed token, uint256 amount);
 
     /// @notice Emitted when an account closing request is initiated.
     /// @param user The address of the user initiating the request.
@@ -81,6 +75,9 @@ interface IRathPaymaster {
     /// @notice Error thrown when user address is invalid.
     error InvalidUser();
 
+    /// @notice Error thrown when a permit fails and leaves an allowance below the deposit amount.
+    error PermitFailed();
+
     /// @notice Initiates the account closing process for the user.
     function submitAccountClosureRequest() external;
 
@@ -99,11 +96,39 @@ interface IRathPaymaster {
     /// @param amount The amount of tokens to deposit.
     function deposit(address token, uint256 amount) external;
 
+    /// @notice Deposits a specified amount of tokens into the caller's account, approving via EIP-2612 permit.
+    /// @param token The address of the ERC20 token to deposit.
+    /// @param amount The amount of tokens to deposit.
+    /// @param deadline The permit expiry timestamp.
+    /// @param v The signature `v` component.
+    /// @param r The signature `r` component.
+    /// @param s The signature `s` component.
+    function depositWithPermit(address token, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external;
+
     /// @notice Deposits a specified amount of tokens into another user's account.
     /// @param user The address whose balance will be credited.
     /// @param token The address of the ERC20 token to deposit.
     /// @param amount The amount of tokens to deposit.
     function depositFor(address user, address token, uint256 amount) external;
+
+    /// @notice Deposits a specified amount of tokens into another user's account, approving via EIP-2612 permit.
+    /// @dev The permit must be signed by the caller, who funds the deposit.
+    /// @param user The address whose balance will be credited.
+    /// @param token The address of the ERC20 token to deposit.
+    /// @param amount The amount of tokens to deposit.
+    /// @param deadline The permit expiry timestamp.
+    /// @param v The signature `v` component.
+    /// @param r The signature `r` component.
+    /// @param s The signature `s` component.
+    function depositForWithPermit(
+        address user,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
 
     /// @notice Returns the version of the contract.
     /// @return A string representing the contract version.

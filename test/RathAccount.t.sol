@@ -49,7 +49,7 @@ contract RathAccountTest is Test {
     }
 
     function testConstructorSetsRolesAndToken() public view {
-        assertEq(account.RathFoundation(), RATH_FOUNDATION);
+        assertEq(account.RATH_FOUNDATION(), RATH_FOUNDATION);
         assertEq(account.owner(), OWNER);
         assertEq(address(account.token()), address(token));
         assertEq(account.COOLING_PERIOD(), 7 days);

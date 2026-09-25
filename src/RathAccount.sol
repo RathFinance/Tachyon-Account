@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./interfaces/IRathAccount.sol";
+import {IRathAccount} from "./interfaces/IRathAccount.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
@@ -17,7 +17,7 @@ import {Ownable} from "solady/auth/Ownable.sol";
 /// @notice Manages Rath accounts.
 contract RathAccount is IRathAccount, Ownable {
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
-    address public immutable RathFoundation;
+    address public immutable RATH_FOUNDATION;
 
     /// @notice Duration of the cooling period required before an account can be closed.
     uint256 public constant COOLING_PERIOD = 7 days;
@@ -36,18 +36,28 @@ contract RathAccount is IRathAccount, Ownable {
 
     /// @notice openAccount modifier to check if the account is open.
     modifier onlyOpenAccount() {
-        if (isAccountClosed) {
-            revert AccountAlreadyClosed();
-        }
+        _onlyOpenAccount();
         _;
     }
 
     /// @notice onlyRathFoundation modifier to check if the caller is RathFoundation.
     modifier onlyRathFoundation() {
-        if (msg.sender != RathFoundation) {
+        _onlyRathFoundation();
+        _;
+    }
+
+    /// @notice Reverts unless the account is still open.
+    function _onlyOpenAccount() private view {
+        if (isAccountClosed) {
+            revert AccountAlreadyClosed();
+        }
+    }
+
+    /// @notice Reverts unless the caller is RathFoundation.
+    function _onlyRathFoundation() private view {
+        if (msg.sender != RATH_FOUNDATION) {
             revert OnlyRathFoundationCanCharge();
         }
-        _;
     }
 
     /// @notice Initializes the contract with the Rath Foundation address, owner, and associated token.
@@ -56,7 +66,7 @@ contract RathAccount is IRathAccount, Ownable {
     /// @param _token Address of the ERC20 token associated with this account.
     constructor(address _rathFoundation, address _owner, address _token) {
         _initializeOwner(_owner);
-        RathFoundation = _rathFoundation;
+        RATH_FOUNDATION = _rathFoundation;
         token = ERC20(_token);
     }
 
@@ -103,10 +113,10 @@ contract RathAccount is IRathAccount, Ownable {
         onlyRathFoundation
         onlyOpenAccount
     {
-        if (msg.sender != RathFoundation) {
+        if (msg.sender != RATH_FOUNDATION) {
             revert OnlyRathFoundationCanCharge();
         }
-        SafeTransferLib.safeTransfer(address(token), RathFoundation, amount);
+        SafeTransferLib.safeTransfer(address(token), RATH_FOUNDATION, amount);
         emit RathAccountCharged(owner(), address(token), amount, bundleRootHash);
     }
 
@@ -117,9 +127,9 @@ contract RathAccount is IRathAccount, Ownable {
             revert AccountNotClosed();
         }
         if (address(_token) == address(0)) {
-            SafeTransferLib.safeTransferETH(RathFoundation, amount);
+            SafeTransferLib.safeTransferETH(RATH_FOUNDATION, amount);
         } else {
-            SafeTransferLib.safeTransfer(_token, RathFoundation, amount);
+            SafeTransferLib.safeTransfer(_token, RATH_FOUNDATION, amount);
         }
     }
 }
