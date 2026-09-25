@@ -4,6 +4,11 @@ pragma solidity ^0.8.13;
 import {Test} from "forge-std/Test.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Ownable} from "solady/auth/Ownable.sol";
+import {Initializable} from "solady/utils/Initializable.sol";
+import {UUPSUpgradeable} from "solady/utils/UUPSUpgradeable.sol";
+
 import {IRathPaymaster} from "../src/interfaces/IRathPaymaster.sol";
 import {RathPaymaster} from "../src/RathPaymaster.sol";
 
@@ -88,6 +93,13 @@ contract ReentrantERC20 is ERC20 {
     }
 }
 
+/// @dev A second implementation, used to prove an upgrade swaps code but keeps proxy storage.
+contract RathPaymasterV2 is RathPaymaster {
+    function upgradedMarker() external pure returns (uint256) {
+        return 42;
+    }
+}
+
 contract RathPaymasterTest is Test {
     address private constant RATH_FOUNDATION = address(0x1001);
     address private constant OWNER = address(0x1002);
@@ -102,11 +114,17 @@ contract RathPaymasterTest is Test {
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     RathPaymaster private paymaster;
+    address private implementation;
     MockERC20 private token;
     address private signer;
 
     function setUp() public {
-        paymaster = new RathPaymaster(RATH_FOUNDATION, OWNER);
+        implementation = address(new RathPaymaster());
+        paymaster = RathPaymaster(
+            payable(new ERC1967Proxy(
+                    implementation, abi.encodeCall(RathPaymaster.initialize, (RATH_FOUNDATION, OWNER))
+                ))
+        );
         token = new MockERC20();
 
         signer = vm.addr(SIGNER_KEY);
@@ -126,11 +144,82 @@ contract RathPaymasterTest is Test {
         token.approve(address(paymaster), type(uint256).max);
     }
 
-    function testConstructorSetsRolesAndConstants() public view {
-        assertEq(paymaster.RATH_FOUNDATION(), RATH_FOUNDATION);
+    function testInitializeSetsRolesAndConstants() public view {
+        assertEq(paymaster.rathFoundation(), RATH_FOUNDATION);
         assertEq(paymaster.owner(), OWNER);
         assertEq(paymaster.COOLING_PERIOD(), 7 days);
-        assertEq(paymaster.version(), "0.0.1");
+        assertEq(paymaster.version(), "0.0.2");
+    }
+
+    /// @dev `uint256(keccak256("eip1967.proxy.implementation")) - 1`.
+    bytes32 private constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+
+    function testProxyPointsAtImplementation() public view {
+        assertEq(address(uint160(uint256(vm.load(address(paymaster), IMPLEMENTATION_SLOT)))), implementation);
+    }
+
+    function testImplementationCannotBeInitialized() public {
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        RathPaymaster(payable(implementation)).initialize(RATH_FOUNDATION, OWNER);
+    }
+
+    function testInitializeCannotBeCalledTwice() public {
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        paymaster.initialize(OTHER, OTHER);
+    }
+
+    function testInitializeRevertsForZeroAddresses() public {
+        RathPaymaster fresh = new RathPaymaster();
+
+        vm.expectRevert(IRathPaymaster.InvalidUser.selector);
+        new ERC1967Proxy(address(fresh), abi.encodeCall(RathPaymaster.initialize, (address(0), OWNER)));
+
+        vm.expectRevert(IRathPaymaster.InvalidUser.selector);
+        new ERC1967Proxy(address(fresh), abi.encodeCall(RathPaymaster.initialize, (RATH_FOUNDATION, address(0))));
+    }
+
+    function testUpgradeByOwnerSwapsCodeAndKeepsState() public {
+        vm.prank(USER);
+        paymaster.deposit(address(token), 100e6);
+
+        address v2 = address(new RathPaymasterV2());
+
+        vm.prank(OWNER);
+        paymaster.upgradeToAndCall(v2, "");
+
+        assertEq(address(uint160(uint256(vm.load(address(paymaster), IMPLEMENTATION_SLOT)))), v2);
+        assertEq(RathPaymasterV2(payable(address(paymaster))).upgradedMarker(), 42);
+
+        // Storage survived the upgrade.
+        assertEq(paymaster.balanceOf(USER, address(token)), 100e6);
+        assertEq(paymaster.rathFoundation(), RATH_FOUNDATION);
+        assertEq(paymaster.owner(), OWNER);
+        assertEq(token.balanceOf(address(paymaster)), 100e6);
+    }
+
+    function testUpgradeRevertsForNonOwner() public {
+        address v2 = address(new RathPaymasterV2());
+
+        vm.expectRevert(Ownable.Unauthorized.selector);
+        vm.prank(USER);
+        paymaster.upgradeToAndCall(v2, "");
+    }
+
+    /// @dev The foundation is privileged but is not the upgrade admin.
+    function testUpgradeRevertsForRathFoundation() public {
+        address v2 = address(new RathPaymasterV2());
+
+        vm.expectRevert(Ownable.Unauthorized.selector);
+        vm.prank(RATH_FOUNDATION);
+        paymaster.upgradeToAndCall(v2, "");
+    }
+
+    function testUpgradeOnImplementationDirectlyReverts() public {
+        address v2 = address(new RathPaymasterV2());
+
+        vm.expectRevert(UUPSUpgradeable.UnauthorizedCallContext.selector);
+        vm.prank(OWNER);
+        RathPaymaster(payable(implementation)).upgradeToAndCall(v2, "");
     }
 
     function testDepositCreditsCallerAndEmitsDeposit() public {

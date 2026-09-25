@@ -11,14 +11,20 @@ import {IRathPaymaster} from "./interfaces/IRathPaymaster.sol";
 import {ERC20} from "solady/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
+import {Initializable} from "solady/utils/Initializable.sol";
+import {UUPSUpgradeable} from "solady/utils/UUPSUpgradeable.sol";
 
 /// @title RathPaymaster
 /// @author Team@rath.fi
 /// @notice Unified Paymaster contract that manages multiple users and multiple tokens.
 /// @dev Users can deposit multiple tokens, and the contract tracks balances per user per token.
-contract RathPaymaster is IRathPaymaster, Ownable {
+///      This contract is the UUPS implementation behind an ERC-1967 proxy; all state lives in
+///      the proxy. Storage is append-only: never reorder, retype, or remove an existing variable
+///      in an upgrade, only add new ones after the last one.
+contract RathPaymaster is IRathPaymaster, Initializable, UUPSUpgradeable, Ownable {
     /// @notice Address of the Rath Foundation authorized to submit bundle root hashes.
-    address public immutable RATH_FOUNDATION;
+    /// @dev Storage rather than immutable so it survives upgrades without being re-supplied.
+    address public rathFoundation;
 
     /// @notice Duration of the cooling period required before an account can be closed.
     uint256 public constant COOLING_PERIOD = 7 days;
@@ -59,17 +65,36 @@ contract RathPaymaster is IRathPaymaster, Ownable {
 
     /// @notice Reverts unless the caller is RathFoundation.
     function _onlyRathFoundation() private view {
-        if (msg.sender != RATH_FOUNDATION) {
+        if (msg.sender != rathFoundation) {
             revert OnlyRathFoundationCanCharge();
         }
     }
 
-    /// @notice Initializes the contract with the Rath Foundation address and owner.
+    /// @notice Locks the implementation so it can only ever be used through a proxy.
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @notice Initializes the proxy with the Rath Foundation address and owner.
+    /// @dev Called once, in the proxy's constructor, so it cannot be front-run.
     /// @param _rathFoundation Address of the Rath Foundation.
     /// @param _owner Address of the contract owner.
-    constructor(address _rathFoundation, address _owner) {
+    function initialize(address _rathFoundation, address _owner) external initializer {
+        if (_rathFoundation == address(0) || _owner == address(0)) {
+            revert InvalidUser();
+        }
+
         _initializeOwner(_owner);
-        RATH_FOUNDATION = _rathFoundation;
+        rathFoundation = _rathFoundation;
+    }
+
+    /// @notice Restricts proxy upgrades to the owner.
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /// @notice Makes `_initializeOwner` revert if the owner has already been set.
+    /// @dev Defense in depth against the ownership being re-seeded by a later initializer.
+    function _guardInitializeOwner() internal pure override returns (bool) {
+        return true;
     }
 
     /// @inheritdoc IRathPaymaster
@@ -223,7 +248,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
 
     /// @inheritdoc IRathPaymaster
     function version() external pure override returns (string memory) {
-        return "0.0.1";
+        return "0.0.2";
     }
 
     /// @inheritdoc IRathPaymaster
@@ -238,7 +263,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
         }
 
         balances[user][token] -= amount;
-        SafeTransferLib.safeTransfer(token, RATH_FOUNDATION, amount);
+        SafeTransferLib.safeTransfer(token, rathFoundation, amount);
 
         emit AccountCharged(user, token, amount, bundleRootHash);
     }
@@ -253,7 +278,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
 
         if (token == address(0)) {
             // Rescue ETH
-            SafeTransferLib.safeTransferETH(RATH_FOUNDATION, amount);
+            SafeTransferLib.safeTransferETH(rathFoundation, amount);
         } else {
             // Rescuing an ERC20 must debit the user's tracked balance so the
             // rescued amount cannot later be re-withdrawn by the user, and so
@@ -262,7 +287,7 @@ contract RathPaymaster is IRathPaymaster, Ownable {
                 revert InsufficientBalance();
             }
             balances[user][token] -= amount;
-            SafeTransferLib.safeTransfer(token, RATH_FOUNDATION, amount);
+            SafeTransferLib.safeTransfer(token, rathFoundation, amount);
         }
 
         emit AccountRescued(user, token, amount);
